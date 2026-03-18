@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>March Madness Auction Draft</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ─── Join Screen ───────────────────────────────────────────────── -->
+  <div id="join-screen" class="screen active">
+    <div class="join-container">
+      <div class="logo">
+        <div class="basketball"></div>
+        <h1>March Madness<br><span>Auction Draft</span></h1>
+      </div>
+      <div class="join-form">
+        <label for="name-select">Select Your Name</label>
+        <select id="name-select">
+          <option value="">-- Pick a name --</option>
+        </select>
+        <div id="password-row" class="password-row" style="display:none;">
+          <label for="admin-password">Admin Password</label>
+          <input type="password" id="admin-password" placeholder="Enter password">
+        </div>
+        <button id="join-btn" class="btn-primary">Join Draft</button>
+        <p id="join-error" class="error-msg"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Lobby Screen ──────────────────────────────────────────────── -->
+  <div id="lobby-screen" class="screen">
+    <div class="lobby-container">
+      <h2>Draft Lobby</h2>
+      <div id="lobby-players" class="lobby-players"></div>
+      <div class="lobby-status">
+        <span id="lobby-count">0 / 12 joined</span>
+      </div>
+      <div id="admin-lobby-controls" style="display:none;">
+        <button id="start-btn" class="btn-primary" style="display:none;">Start Draft</button>
+        <button id="force-start-btn" class="btn-secondary" style="display:none;">Force Start (skip missing players)</button>
+      </div>
+      <p id="lobby-msg" class="subtle-msg"></p>
+    </div>
+  </div>
+
+  <!-- ─── Kicked Screen ──────────────────────────────────────────────── -->
+  <div id="kicked-screen" class="screen">
+    <div class="join-container">
+      <h2 style="color:var(--red);margin-bottom:16px;">Removed from Draft</h2>
+      <p id="kicked-msg" class="subtle-msg" style="margin-bottom:20px;"></p>
+      <button id="rejoin-btn" class="btn-primary" onclick="location.reload()">Rejoin</button>
+    </div>
+  </div>
+
+  <!-- ─── Draft Screen ──────────────────────────────────────────────── -->
+  <div id="draft-screen" class="screen">
+    <header class="draft-header">
+      <div class="draft-header-left">
+        <h1>March Madness Auction Draft</h1>
+        <div id="connection-status" class="connection-status connected">
+          <span class="status-dot"></span>
+          <span class="status-text">Connected</span>
+        </div>
+      </div>
+      <div class="draft-progress">
+        <span id="draft-progress-text">0 / 60 teams drafted</span>
+        <div class="progress-bar"><div id="progress-fill" class="progress-fill"></div></div>
+      </div>
+    </header>
+
+    <!-- Admin Bar (only visible to admin) -->
+    <div id="admin-bar" class="admin-bar" style="display:none;">
+      <div class="admin-bar-left">
+        <span class="admin-badge">ADMIN</span>
+        <button id="admin-pause-btn" class="btn-admin">Pause Draft</button>
+        <button id="admin-resume-btn" class="btn-admin btn-admin-green" style="display:none;">Resume Draft</button>
+        <button id="admin-skip-btn" class="btn-admin">Skip Nomination</button>
+      </div>
+      <div class="admin-bar-right">
+        <button id="admin-panel-toggle" class="btn-admin">Manage Sales</button>
+        <button id="admin-kick-toggle" class="btn-admin btn-admin-red">Kick Player</button>
+        <button id="admin-restart-toggle" class="btn-admin btn-admin-red">Restart Draft</button>
+      </div>
+    </div>
+
+    <!-- Admin Modal: Manage Sales -->
+    <div id="admin-sales-modal" class="modal-overlay" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Manage Sales</h3>
+          <button class="modal-close" onclick="document.getElementById('admin-sales-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="admin-section">
+            <h4>Update Sale Price</h4>
+            <select id="admin-sale-team"></select>
+            <div class="admin-inline">
+              <label>New Price: $</label>
+              <input type="number" id="admin-new-price" min="1" value="1">
+              <button id="admin-update-sale-btn" class="btn-admin">Update</button>
+            </div>
+          </div>
+          <div class="admin-section">
+            <h4>Remove Sale (Refund)</h4>
+            <select id="admin-remove-team"></select>
+            <button id="admin-remove-sale-btn" class="btn-admin btn-admin-red">Remove Sale</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Modal: Kick Player -->
+    <div id="admin-kick-modal" class="modal-overlay" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Kick Player</h3>
+          <button class="modal-close" onclick="document.getElementById('admin-kick-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+          <p class="subtle-msg" style="margin-bottom:12px;">Kick a player so the correct person can rejoin with that name.</p>
+          <select id="admin-kick-player"></select>
+          <button id="admin-kick-btn" class="btn-admin btn-admin-red" style="margin-top:10px;">Kick Player</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Modal: Restart Draft -->
+    <div id="admin-restart-modal" class="modal-overlay" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Restart Draft</h3>
+          <button class="modal-close" onclick="document.getElementById('admin-restart-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="restart-warning">
+            <div class="restart-warning-icon">!</div>
+            <h4>Are you sure?</h4>
+            <p>This will <strong>erase all picks, bids, and draft history</strong> and start the entire draft over from scratch. All players will remain connected.</p>
+            <p style="margin-top:8px;color:var(--red);font-weight:600;">This cannot be undone.</p>
+          </div>
+          <div class="restart-confirm-row">
+            <label>Type <strong>RESTART</strong> to confirm:</label>
+            <input type="text" id="restart-confirm-input" class="restart-confirm-input" placeholder="Type RESTART" autocomplete="off">
+          </div>
+          <div class="restart-actions">
+            <button class="btn-secondary" onclick="document.getElementById('admin-restart-modal').style.display='none'">Cancel</button>
+            <button id="admin-restart-btn" class="btn-admin btn-admin-red restart-btn" disabled>Restart Draft</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Paused Overlay -->
+    <div id="paused-overlay" class="paused-overlay" style="display:none;">
+      <div class="paused-content">
+        <h2>DRAFT PAUSED</h2>
+        <p>The admin has paused the draft. Please wait...</p>
+      </div>
+    </div>
+
+    <!-- Mobile Tab Bar -->
+    <nav id="mobile-tabs" class="mobile-tabs">
+      <button class="mobile-tab active" data-tab="auction">Auction</button>
+      <button class="mobile-tab" data-tab="roster">My Roster</button>
+      <button class="mobile-tab" data-tab="board">Draft Board</button>
+    </nav>
+
+    <div class="draft-layout">
+      <!-- Left Sidebar: Your Roster -->
+      <aside class="sidebar sidebar-left" data-panel="roster">
+        <h3>Your Roster</h3>
+        <div class="budget-display">
+          <div class="budget-item">
+            <span class="budget-label">Budget</span>
+            <span id="your-budget" class="budget-value">$200</span>
+          </div>
+          <div class="budget-item">
+            <span class="budget-label">Max Bid</span>
+            <span id="your-max-bid" class="budget-value">$196</span>
+          </div>
+          <div class="budget-item">
+            <span class="budget-label">Spent</span>
+            <span id="your-spent" class="budget-value">$0</span>
+          </div>
+        </div>
+        <div id="your-teams" class="team-list"></div>
+      </aside>
+
+      <!-- Center: Auction Area -->
+      <main class="auction-area" data-panel="auction">
+        <!-- Nomination Phase -->
+        <div id="nomination-panel" class="auction-panel" style="display:none;">
+          <h2 id="nominator-label">Your turn to nominate!</h2>
+          <div id="nominate-controls" style="display:none;">
+            <select id="team-select">
+              <option value="">-- Select a team --</option>
+            </select>
+            <div class="bid-row">
+              <label>Starting Bid: $</label>
+              <input type="number" id="starting-bid" value="1" min="1">
+            </div>
+            <button id="nominate-btn" class="btn-primary">Nominate</button>
+          </div>
+          <p id="waiting-msg" class="subtle-msg" style="display:none;">Waiting for nomination...</p>
+        </div>
+
+        <!-- Auction Phase -->
+        <div id="auction-panel" class="auction-panel" style="display:none;">
+          <div class="auction-team">
+            <span id="auction-seed" class="seed-badge">1</span>
+            <span id="auction-team-name" class="team-name-big">Auburn</span>
+            <span id="auction-region" class="region-label">South</span>
+          </div>
+          <div class="timer-container">
+            <div id="timer-ring" class="timer-ring">
+              <svg viewBox="0 0 120 120">
+                <circle class="timer-bg" cx="60" cy="60" r="54" />
+                <circle id="timer-circle" class="timer-fg" cx="60" cy="60" r="54" />
+              </svg>
+              <span id="timer-text" class="timer-text">10</span>
+            </div>
+          </div>
+          <div class="current-bid-display">
+            <div class="bid-amount">$<span id="current-bid-amount">1</span></div>
+            <div class="bid-leader">High bidder: <span id="current-bidder">--</span></div>
+          </div>
+          <div class="bid-controls">
+            <div class="quick-bid-row">
+              <button class="bid-quick" data-increment="1">+$1</button>
+              <button class="bid-quick" data-increment="5">+$5</button>
+              <button class="bid-quick" data-increment="10">+$10</button>
+              <button class="bid-quick" data-increment="25">+$25</button>
+            </div>
+            <div class="bid-custom">
+              <span>$</span>
+              <input type="number" id="bid-input" min="1">
+              <button id="bid-btn" class="btn-bid">BID</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sold Panel -->
+        <div id="sold-panel" class="auction-panel" style="display:none;">
+          <div class="sold-animation">
+            <h2 class="sold-text">SOLD!</h2>
+            <div class="sold-details">
+              <span id="sold-team" class="team-name-big"></span>
+              <span class="sold-to">to <span id="sold-winner"></span></span>
+              <span class="sold-price">for $<span id="sold-price"></span></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Error Toast -->
+        <div id="error-toast" class="error-toast"></div>
+
+        <!-- Activity Log -->
+        <div id="activity-log" class="activity-log">
+          <div id="activity-entries"></div>
+        </div>
+      </main>
+
+      <!-- Right Sidebar: Draft Board -->
+      <aside class="sidebar sidebar-right" data-panel="board">
+        <h3>Draft Board</h3>
+        <div id="draft-board" class="draft-board"></div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- ─── Results Screen ────────────────────────────────────────────── -->
+  <div id="results-screen" class="screen">
+    <div class="results-container">
+      <h2>Draft Complete!</h2>
+      <div id="results-grid" class="results-grid"></div>
+      <div class="results-actions">
+        <a id="csv-download-btn" class="btn-primary" href="/api/export-csv" download="draft-results.csv">Download CSV</a>
+        <button id="copy-btn" class="btn-secondary">Copy to Clipboard</button>
+      </div>
+      <p id="copy-msg" class="subtle-msg"></p>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
