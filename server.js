@@ -26,7 +26,7 @@ const PARTICIPANTS = [
 ];
 
 const ADMIN_NAME = 'Neff';
-const ADMIN_PASSWORD = 'madness2026';
+const ADMIN_PASSWORD = 'DegoRijj1';
 
 const STARTING_BUDGET = 200;
 const TEAMS_PER_PLAYER = 5;
