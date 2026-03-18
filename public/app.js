@@ -26,6 +26,19 @@ const STEAL_LINES = [
 let overpayIndex = 0;
 let stealIndex = 0;
 
+// Browsers block speechSynthesis until a user gesture unlocks it.
+// We unlock on the first click/tap anywhere on the page.
+let speechUnlocked = false;
+function unlockSpeech() {
+  if (speechUnlocked || !window.speechSynthesis) return;
+  const silent = new SpeechSynthesisUtterance('');
+  silent.volume = 0;
+  window.speechSynthesis.speak(silent);
+  speechUnlocked = true;
+}
+document.addEventListener('click', unlockSpeech, { once: false });
+document.addEventListener('touchstart', unlockSpeech, { once: false });
+
 function speakCommentary(text) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -33,7 +46,8 @@ function speakCommentary(text) {
   utter.rate = 0.95;
   utter.pitch = 1.0;
   utter.volume = 1.0;
-  window.speechSynthesis.speak(utter);
+  // Some browsers need a slight delay after cancel
+  setTimeout(() => window.speechSynthesis.speak(utter), 50);
 }
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
