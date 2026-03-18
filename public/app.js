@@ -4,6 +4,37 @@ let myName = null;
 let currentState = null;
 let lastKnownHighBid = null; // Track to avoid resetting bid input on timer ticks
 let userEditedBid = false;   // Track if user has manually edited the bid input
+let lastSpokenAuctionTeam = null; // Track to avoid repeating commentary
+
+// ─── Neffy's Model Commentary ───────────────────────────────────────────────
+
+const OVERPAY_LINES = [
+  "You got hosed!",
+  "Fucken idddiotttt!",
+  "Whadda Loser!",
+  "Bad pick. Bad bad pick.",
+  "Listen to the model man.",
+];
+
+const STEAL_LINES = [
+  "WOW! What a steal!",
+  "Now that's good value.",
+  "Nice pick kid.",
+  "What daaa fuckkkk!",
+];
+
+let overpayIndex = 0;
+let stealIndex = 0;
+
+function speakCommentary(text) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.95;
+  utter.pitch = 1.0;
+  utter.volume = 1.0;
+  window.speechSynthesis.speak(utter);
+}
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
 
@@ -675,6 +706,37 @@ function renderDraft(state) {
     soldTeam.textContent = auction.team;
     soldWinner.textContent = auction.soldTo;
     soldPrice.textContent = auction.soldPrice;
+
+    // Neffy's Model commentary
+    const commentaryEl = document.getElementById('sold-commentary');
+    const dvs = state.draftValues || {};
+    const modelValue = dvs[auction.team];
+
+    if (modelValue && auction.team !== lastSpokenAuctionTeam) {
+      lastSpokenAuctionTeam = auction.team;
+      const priceDiff = auction.soldPrice - modelValue;
+      const pctDiff = priceDiff / modelValue;
+
+      if (pctDiff > 0.10) {
+        // Overpaid by 10%+
+        const line = OVERPAY_LINES[overpayIndex % OVERPAY_LINES.length];
+        overpayIndex++;
+        commentaryEl.textContent = line;
+        commentaryEl.className = 'sold-commentary overpay';
+        commentaryEl.style.display = 'block';
+        speakCommentary(line);
+      } else if (pctDiff < -0.10) {
+        // Steal — 10%+ under
+        const line = STEAL_LINES[stealIndex % STEAL_LINES.length];
+        stealIndex++;
+        commentaryEl.textContent = line;
+        commentaryEl.className = 'sold-commentary steal';
+        commentaryEl.style.display = 'block';
+        speakCommentary(line);
+      } else {
+        commentaryEl.style.display = 'none';
+      }
+    }
 
     // Reset bid tracking for next auction
     lastKnownHighBid = null;
