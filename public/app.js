@@ -597,7 +597,7 @@ function renderDraft(state) {
       teams.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.name;
-        const val = dv[t.seed] || '?';
+        const val = dv[t.name] || '?';
         opt.textContent = `(${t.seed}) ${t.name} — ${t.region} — Neffy's Model: $${val}`;
         teamSelect.appendChild(opt);
       });
@@ -626,7 +626,7 @@ function renderDraft(state) {
     auctionRegion.textContent = auction.region;
     const auctionDraftValue = document.getElementById('auction-draft-value');
     const dvs = state.draftValues || {};
-    auctionDraftValue.innerHTML = `<span class="neffys-model">Neffy's Model</span> $${dvs[auction.seed] || '?'}`;
+    auctionDraftValue.innerHTML = `<span class="neffys-model">Neffy's Model</span> $${dvs[auction.team] || '?'}`;
 
     // Timer
     const timeLeft = auction.timeLeft;
@@ -647,12 +647,9 @@ function renderDraft(state) {
     currentBidAmount.textContent = auction.highBid;
     currentBidder.textContent = auction.highBidder;
 
-    // Only update bid input when the high bid actually changes, NOT on every timer tick
+    // Track high bid changes but don't auto-fill the input
     if (auction.highBid !== lastKnownHighBid) {
       lastKnownHighBid = auction.highBid;
-      if (!userEditedBid) {
-        bidInput.value = auction.highBid + 1;
-      }
     }
 
     // Disable bid controls if player is at max teams or can't bid higher
@@ -682,6 +679,7 @@ function renderDraft(state) {
     // Reset bid tracking for next auction
     lastKnownHighBid = null;
     userEditedBid = false;
+    bidInput.value = '';
   }
 }
 

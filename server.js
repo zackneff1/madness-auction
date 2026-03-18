@@ -114,27 +114,126 @@ const TEAMS = [
   { name: 'Idaho', seed: 15, region: 'South' },
 ];
 
-// ─── Draft Value Model ───────────────────────────────────────────────────────
-// Expected tournament wins by seed based on historical NCAA data (1985-2024).
-// Each value = sum of P(advancing past each round): R64 + R32 + S16 + E8 + F4 + Championship
-const SEED_EXPECTED_POINTS = {
-  1: 3.47, 2: 2.69, 3: 2.05, 4: 1.75, 5: 1.29,
-  6: 1.24, 7: 1.08, 8: 0.87, 9: 0.81, 10: 0.66,
-  11: 0.59, 12: 0.55, 13: 0.30, 14: 0.20, 15: 0.10,
+// ─── Draft Value Model (Neffy's Model) ──────────────────────────────────────
+// Per-team probability of advancing past each round, from ESPN BPI & Vegas odds (March 2026).
+// Format: [R64 win, R32 win, S16 win, E8 win, F4 win, Championship win]
+const TEAM_WIN_PROBS = {
+  // ── 1 seeds ──
+  'Duke':           [0.990, 0.917, 0.748, 0.571, 0.379, 0.244],
+  'Arizona':        [0.990, 0.890, 0.693, 0.448, 0.261, 0.140],
+  'Michigan':       [0.989, 0.895, 0.683, 0.460, 0.278, 0.153],
+  'Florida':        [0.996, 0.857, 0.602, 0.313, 0.153, 0.077],
+  // ── 2 seeds ──
+  'UConn':          [0.964, 0.782, 0.426, 0.149, 0.062, 0.025],
+  'Purdue':         [0.978, 0.849, 0.466, 0.220, 0.102, 0.043],
+  'Iowa State':     [0.984, 0.817, 0.545, 0.265, 0.134, 0.060],
+  'Houston':        [0.982, 0.864, 0.540, 0.333, 0.173, 0.094],
+  // ── 3 seeds ──
+  'Michigan State':  [0.942, 0.620, 0.312, 0.099, 0.037, 0.013],
+  'Gonzaga':        [0.956, 0.762, 0.413, 0.194, 0.090, 0.037],
+  'Virginia':       [0.930, 0.555, 0.196, 0.061, 0.020, 0.005],
+  'Illinois':       [0.973, 0.836, 0.386, 0.207, 0.091, 0.042],
+  // ── 4 seeds ──
+  'Kansas':         [0.926, 0.583, 0.124, 0.051, 0.016, 0.005],
+  'Arkansas':       [0.916, 0.659, 0.186, 0.070, 0.022, 0.006],
+  'Alabama':        [0.901, 0.644, 0.192, 0.081, 0.029, 0.009],
+  'Nebraska':       [0.927, 0.589, 0.198, 0.062, 0.018, 0.006],
+  // ── 5 seeds ──
+  "St. John's":     [0.850, 0.387, 0.095, 0.044, 0.015, 0.005],
+  'Wisconsin':      [0.763, 0.286, 0.071, 0.024, 0.007, 0.002],
+  'Texas Tech':     [0.820, 0.313, 0.082, 0.031, 0.010, 0.003],
+  'Vanderbilt':     [0.812, 0.369, 0.139, 0.050, 0.017, 0.006],
+  // ── 6 seeds ──
+  'Louisville':     [0.810, 0.343, 0.181, 0.060, 0.024, 0.009],
+  'BYU':            [0.630, 0.166, 0.064, 0.021, 0.007, 0.002],
+  'Tennessee':      [0.785, 0.386, 0.168, 0.065, 0.026, 0.009],
+  'North Carolina': [0.616, 0.112, 0.026, 0.007, 0.002, 0.000],
+  // ── 7 seeds ──
+  'UCLA':           [0.722, 0.179, 0.067, 0.015, 0.004, 0.001],
+  'Miami (FL)':     [0.551, 0.065, 0.020, 0.005, 0.001, 0.000],
+  'Kentucky':       [0.722, 0.154, 0.072, 0.022, 0.007, 0.002],
+  "Saint Mary's":   [0.532, 0.075, 0.023, 0.007, 0.002, 0.000],
+  // ── 8 seeds ──
+  'Ohio State':     [0.654, 0.063, 0.027, 0.009, 0.002, 0.001],
+  'Villanova':      [0.483, 0.048, 0.015, 0.004, 0.001, 0.000],
+  'Georgia':        [0.509, 0.054, 0.020, 0.006, 0.001, 0.000],
+  'Clemson':        [0.506, 0.073, 0.029, 0.007, 0.002, 0.000],
+  // ── 9 seeds ──
+  'TCU':            [0.346, 0.035, 0.014, 0.004, 0.001, 0.000],
+  'Utah State':     [0.517, 0.052, 0.016, 0.004, 0.001, 0.000],
+  'Saint Louis':    [0.491, 0.047, 0.018, 0.005, 0.001, 0.000],
+  'Iowa':           [0.494, 0.063, 0.024, 0.006, 0.002, 0.000],
+  // ── 10 seeds ──
+  'UCF':            [0.278, 0.031, 0.008, 0.002, 0.000, 0.000],
+  'Missouri':       [0.449, 0.048, 0.014, 0.003, 0.001, 0.000],
+  'Santa Clara':    [0.278, 0.028, 0.007, 0.002, 0.000, 0.000],
+  'Texas A&M':      [0.468, 0.058, 0.017, 0.005, 0.001, 0.000],
+  // ── 11 seeds ──
+  'South Florida':  [0.190, 0.022, 0.004, 0.001, 0.000, 0.000],
+  'Texas':          [0.370, 0.042, 0.011, 0.003, 0.001, 0.000],
+  'SMU':            [0.250, 0.025, 0.006, 0.001, 0.000, 0.000],
+  'VCU':            [0.390, 0.040, 0.009, 0.002, 0.001, 0.000],
+  // ── 12 seeds ──
+  'Northern Iowa':  [0.150, 0.018, 0.003, 0.001, 0.000, 0.000],
+  'High Point':     [0.240, 0.028, 0.005, 0.001, 0.000, 0.000],
+  'Akron':          [0.180, 0.020, 0.004, 0.001, 0.000, 0.000],
+  'McNeese':        [0.190, 0.022, 0.004, 0.001, 0.000, 0.000],
+  // ── 13 seeds ──
+  'Cal Baptist':    [0.074, 0.008, 0.001, 0.000, 0.000, 0.000],
+  'Hawaii':         [0.084, 0.010, 0.002, 0.000, 0.000, 0.000],
+  'Hofstra':        [0.099, 0.012, 0.002, 0.000, 0.000, 0.000],
+  'Troy':           [0.073, 0.007, 0.001, 0.000, 0.000, 0.000],
+  // ── 14 seeds ──
+  'North Dakota State': [0.058, 0.006, 0.001, 0.000, 0.000, 0.000],
+  'Kennesaw State': [0.044, 0.004, 0.001, 0.000, 0.000, 0.000],
+  'Wright State':   [0.070, 0.007, 0.001, 0.000, 0.000, 0.000],
+  'Penn':           [0.027, 0.003, 0.000, 0.000, 0.000, 0.000],
+  // ── 15 seeds ──
+  'Furman':         [0.036, 0.004, 0.001, 0.000, 0.000, 0.000],
+  'Queens':         [0.022, 0.002, 0.000, 0.000, 0.000, 0.000],
+  'Tennessee State': [0.016, 0.002, 0.000, 0.000, 0.000, 0.000],
+  'Idaho':          [0.018, 0.002, 0.000, 0.000, 0.000, 0.000],
 };
+
+function getTeamEV(teamName) {
+  const probs = TEAM_WIN_PROBS[teamName];
+  if (!probs) return 0.01; // fallback for unknown teams
+  return probs.reduce((sum, p) => sum + p, 0); // expected wins
+}
 
 function getDraftValues() {
   const activeCount = getActiveParticipants().length || 1;
   const totalBudget = activeCount * STARTING_BUDGET;
+
+  // Compute raw EV for all teams
+  const evs = {};
   let totalEV = 0;
-  for (let seed = 1; seed <= 15; seed++) {
-    totalEV += SEED_EXPECTED_POINTS[seed] * 4;
+  for (const team of TEAMS) {
+    const ev = getTeamEV(team.name);
+    evs[team.name] = ev;
+    totalEV += ev;
   }
-  const values = {};
-  for (let seed = 1; seed <= 15; seed++) {
-    values[seed] = Math.max(1, Math.round((SEED_EXPECTED_POINTS[seed] / totalEV) * totalBudget));
+
+  // Compute exact proportional values (minimum $1 per team)
+  const exact = {};
+  let floorSum = 0;
+  const remainders = [];
+  for (const team of TEAMS) {
+    const raw = Math.max(1, (evs[team.name] / totalEV) * totalBudget);
+    const floored = Math.floor(raw);
+    exact[team.name] = floored;
+    floorSum += floored;
+    remainders.push({ name: team.name, remainder: raw - floored });
   }
-  return values;
+
+  // Distribute leftover dollars to teams with largest remainders (ensures exact sum)
+  remainders.sort((a, b) => b.remainder - a.remainder);
+  let leftover = totalBudget - floorSum;
+  for (let i = 0; i < leftover && i < remainders.length; i++) {
+    exact[remainders[i].name]++;
+  }
+
+  return exact;
 }
 
 // ─── Game State ──────────────────────────────────────────────────────────────
@@ -392,7 +491,7 @@ function scheduleAutoBid() {
 
     const auction = state.currentAuction;
     const draftValues = getDraftValues();
-    const teamDraftValue = draftValues[auction.seed];
+    const teamDraftValue = draftValues[auction.team];
 
     for (const name of PARTICIPANTS) {
       const p = state.participants[name];
