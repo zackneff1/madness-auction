@@ -251,6 +251,20 @@ select:focus, input[type="number"]:focus {
   content: ' \2713';
   color: var(--green);
 }
+.lobby-player.disabled-player {
+  opacity: 0.35;
+  text-decoration: line-through;
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+.lobby-player.auto-draft-player {
+  border-color: var(--gold);
+  background: rgba(251, 191, 36, 0.08);
+}
+.lobby-player.auto-draft-player::after {
+  content: ' \2713';
+  color: var(--gold);
+}
 
 .lobby-status {
   margin-bottom: 20px;
@@ -801,6 +815,29 @@ select:focus, input[type="number"]:focus {
   border-radius: 20px;
 }
 
+.draft-value-badge {
+  font-size: 0.8rem;
+  color: var(--gold);
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 700;
+}
+
+.neffys-model {
+  background: var(--gold);
+  color: var(--bg-dark);
+  font-size: 0.55rem;
+  font-weight: 800;
+  padding: 2px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
 /* Timer */
 .timer-container {
   margin: 20px 0;
@@ -1105,6 +1142,69 @@ select:focus, input[type="number"]:focus {
   gap: 12px;
   justify-content: center;
   margin-top: 8px;
+}
+
+/* ─── Admin Players Modal ─────────────────────────────────────────────────── */
+.admin-players-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+}
+
+.admin-player-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.admin-player-name.offline {
+  color: var(--text-dim);
+}
+
+.admin-player-controls {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-toggle {
+  font-size: 0.7rem !important;
+  padding: 4px 10px !important;
+  border-radius: 4px;
+  transition: all 0.15s;
+}
+.btn-toggle.active-red {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: var(--red) !important;
+  color: var(--red) !important;
+}
+.btn-toggle.active-green {
+  background: rgba(34, 197, 94, 0.15) !important;
+  border-color: var(--green) !important;
+  color: var(--green) !important;
+}
+
+/* ─── Auto-Draft Board Indicator ──────────────────────────────────────────── */
+.auto-badge {
+  background: var(--gold);
+  color: var(--bg-dark);
+  font-size: 0.5rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 3px;
+  letter-spacing: 0.5px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.board-player.is-auto-draft {
+  border-left-color: var(--gold);
 }
 
 /* ─── Nominator highlight ─────────────────────────────────────────────────── */

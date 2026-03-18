@@ -165,6 +165,13 @@ socket.on('kicked', (msg) => {
   showScreen('kicked');
 });
 
+// ─── Lobby Manage Players ─────────────────────────────────────────────────────
+
+document.getElementById('lobby-manage-players-btn').addEventListener('click', () => {
+  adminPlayersModal.style.display = 'flex';
+  populateAdminPlayersList();
+});
+
 // ─── Start Draft ─────────────────────────────────────────────────────────────
 
 startBtn.addEventListener('click', () => {
@@ -244,6 +251,14 @@ adminPanelToggle.addEventListener('click', () => {
 adminKickToggle.addEventListener('click', () => {
   adminKickModal.style.display = 'flex';
   populateAdminKickDropdown();
+});
+
+const adminPlayersToggle = document.getElementById('admin-players-toggle');
+const adminPlayersModal = document.getElementById('admin-players-modal');
+
+adminPlayersToggle.addEventListener('click', () => {
+  adminPlayersModal.style.display = 'flex';
+  populateAdminPlayersList();
 });
 
 document.getElementById('admin-update-sale-btn').addEventListener('click', () => {
@@ -358,6 +373,49 @@ function populateAdminKickDropdown() {
   }
 }
 
+function populateAdminPlayersList() {
+  if (!currentState) return;
+  const list = document.getElementById('admin-players-list');
+  list.innerHTML = '';
+
+  for (const name of currentState.participantOrder) {
+    if (name === 'Neff') continue;
+    const p = currentState.participants[name];
+    const row = document.createElement('div');
+    row.className = 'admin-player-row';
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'admin-player-name';
+    nameSpan.textContent = name;
+    if (!p.online && p.joined) nameSpan.classList.add('offline');
+
+    const controls = document.createElement('div');
+    controls.className = 'admin-player-controls';
+
+    const disableBtn = document.createElement('button');
+    disableBtn.className = 'btn-admin btn-toggle' + (p.disabled ? ' active-red' : '');
+    disableBtn.textContent = p.disabled ? 'Disabled' : 'Disable';
+    disableBtn.addEventListener('click', () => {
+      socket.emit('adminToggleDisable', { name });
+      setTimeout(populateAdminPlayersList, 300);
+    });
+
+    const autoBtn = document.createElement('button');
+    autoBtn.className = 'btn-admin btn-toggle' + (p.autoDraft ? ' active-green' : '');
+    autoBtn.textContent = p.autoDraft ? 'Auto-Draft ON' : 'Auto-Draft';
+    autoBtn.addEventListener('click', () => {
+      socket.emit('adminToggleAutoDraft', { name });
+      setTimeout(populateAdminPlayersList, 300);
+    });
+
+    controls.appendChild(autoBtn);
+    controls.appendChild(disableBtn);
+    row.appendChild(nameSpan);
+    row.appendChild(controls);
+    list.appendChild(row);
+  }
+}
+
 // ─── Copy Results ────────────────────────────────────────────────────────────
 
 copyBtn.addEventListener('click', () => {
@@ -414,20 +472,37 @@ function renderLobby(state) {
   const names = state.participantOrder;
   lobbyPlayers.innerHTML = '';
   let joinedCount = 0;
+  let activeCount = 0;
   names.forEach(name => {
+    const p = state.participants[name];
     const div = document.createElement('div');
-    div.className = 'lobby-player' + (state.participants[name].joined ? ' joined' : '');
-    div.textContent = name;
+    div.className = 'lobby-player';
+    if (p.disabled) {
+      div.classList.add('disabled-player');
+      div.textContent = name + ' (disabled)';
+    } else if (p.autoDraft) {
+      div.classList.add('joined', 'auto-draft-player');
+      div.textContent = name + ' (auto)';
+      activeCount++;
+      joinedCount++; // auto-draft counts as joined
+    } else if (p.joined) {
+      div.classList.add('joined');
+      div.textContent = name;
+      activeCount++;
+      joinedCount++;
+    } else {
+      div.textContent = name;
+      activeCount++;
+    }
     lobbyPlayers.appendChild(div);
-    if (state.participants[name].joined) joinedCount++;
   });
-  lobbyCount.textContent = `${joinedCount} / ${names.length} joined`;
+  lobbyCount.textContent = `${joinedCount} / ${activeCount} joined`;
 
   const isAdmin = state.isAdminAuthenticated;
 
   if (isAdmin) {
     adminLobbyControls.style.display = 'block';
-    if (joinedCount === names.length) {
+    if (joinedCount >= activeCount && activeCount > 0) {
       startBtn.style.display = 'inline-block';
       forceStartBtn.style.display = 'none';
       lobbyMsg.textContent = '';
@@ -438,7 +513,7 @@ function renderLobby(state) {
     }
   } else {
     adminLobbyControls.style.display = 'none';
-    if (joinedCount === names.length) {
+    if (joinedCount >= activeCount && activeCount > 0) {
       lobbyMsg.textContent = 'Waiting for Neff to start the draft...';
     } else {
       lobbyMsg.textContent = 'Waiting for all participants to join...';
@@ -518,20 +593,30 @@ function renderDraft(state) {
 
       teamSelect.innerHTML = '<option value="">-- Select a team --</option>';
       const teams = [...state.remainingTeams].sort((a, b) => a.seed - b.seed || a.name.localeCompare(b.name));
+      const dv = state.draftValues || {};
       teams.forEach(t => {
         const opt = document.createElement('option');
         opt.value = t.name;
-        opt.textContent = `(${t.seed}) ${t.name} — ${t.region}`;
+        const val = dv[t.seed] || '?';
+        opt.textContent = `(${t.seed}) ${t.name} — ${t.region} — Neffy's Model: $${val}`;
         teamSelect.appendChild(opt);
       });
     } else {
+      const nominatorData = state.nominator ? state.participants[state.nominator] : null;
+      const isNominatorAuto = nominatorData && nominatorData.autoDraft;
       nominatorLabel.textContent = state.phase === 'paused'
         ? 'Draft is paused...'
-        : `${state.nominator} is choosing a team to nominate...`;
+        : isNominatorAuto
+          ? `${state.nominator} (auto-draft) is nominating...`
+          : `${state.nominator} is choosing a team to nominate...`;
       nominatorLabel.className = '';
       nominateControls.style.display = 'none';
       waitingMsg.style.display = 'block';
-      waitingMsg.textContent = state.phase === 'paused' ? 'Waiting for admin to resume...' : 'Waiting for nomination...';
+      waitingMsg.textContent = state.phase === 'paused'
+        ? 'Waiting for admin to resume...'
+        : isNominatorAuto
+          ? 'Auto-drafting...'
+          : 'Waiting for nomination...';
     }
   } else if (state.phase === 'auction') {
     auctionPanel.style.display = 'block';
@@ -539,6 +624,9 @@ function renderDraft(state) {
     auctionSeed.textContent = auction.seed;
     auctionTeamName.textContent = auction.team;
     auctionRegion.textContent = auction.region;
+    const auctionDraftValue = document.getElementById('auction-draft-value');
+    const dvs = state.draftValues || {};
+    auctionDraftValue.innerHTML = `<span class="neffys-model">Neffy's Model</span> $${dvs[auction.seed] || '?'}`;
 
     // Timer
     const timeLeft = auction.timeLeft;
@@ -602,17 +690,20 @@ function renderDraftBoard(state) {
   const names = state.participantOrder;
   names.forEach(name => {
     const p = state.participants[name];
+    if (p.disabled) return; // hide disabled players from draft board
     const div = document.createElement('div');
     div.className = 'board-player';
     if (state.nominator === name) div.classList.add('is-nominator');
     if (name === myName) div.classList.add('is-you');
     if (!p.online && p.joined) div.classList.add('is-offline');
+    if (p.autoDraft) div.classList.add('is-auto-draft');
 
     const header = document.createElement('div');
     header.className = 'board-player-header';
     header.innerHTML = `
       <span class="board-player-name">
         ${!p.online && p.joined ? '<span class="offline-dot" title="Offline"></span>' : ''}
+        ${p.autoDraft ? '<span class="auto-badge" title="Auto-Draft">AUTO</span>' : ''}
         ${name}
       </span>
       <span class="board-player-stats">
@@ -666,6 +757,7 @@ function renderResults(state) {
   const names = state.participantOrder;
   names.forEach(name => {
     const p = state.participants[name];
+    if (p.disabled) return;
     const card = document.createElement('div');
     card.className = 'result-card';
 

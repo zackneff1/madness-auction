@@ -114,6 +114,29 @@ const TEAMS = [
   { name: 'Idaho', seed: 15, region: 'South' },
 ];
 
+// ─── Draft Value Model ───────────────────────────────────────────────────────
+// Expected tournament wins by seed based on historical NCAA data (1985-2024).
+// Each value = sum of P(advancing past each round): R64 + R32 + S16 + E8 + F4 + Championship
+const SEED_EXPECTED_POINTS = {
+  1: 3.47, 2: 2.69, 3: 2.05, 4: 1.75, 5: 1.29,
+  6: 1.24, 7: 1.08, 8: 0.87, 9: 0.81, 10: 0.66,
+  11: 0.59, 12: 0.55, 13: 0.30, 14: 0.20, 15: 0.10,
+};
+
+function getDraftValues() {
+  const activeCount = getActiveParticipants().length || 1;
+  const totalBudget = activeCount * STARTING_BUDGET;
+  let totalEV = 0;
+  for (let seed = 1; seed <= 15; seed++) {
+    totalEV += SEED_EXPECTED_POINTS[seed] * 4;
+  }
+  const values = {};
+  for (let seed = 1; seed <= 15; seed++) {
+    values[seed] = Math.max(1, Math.round((SEED_EXPECTED_POINTS[seed] / totalEV) * totalBudget));
+  }
+  return values;
+}
+
 // ─── Game State ──────────────────────────────────────────────────────────────
 
 const state = {
@@ -134,6 +157,8 @@ PARTICIPANTS.forEach(name => {
     socketId: null,
     budget: STARTING_BUDGET,
     teams: [],
+    disabled: false,
+    autoDraft: false,
   };
 });
 
@@ -141,15 +166,25 @@ PARTICIPANTS.forEach(name => {
 const adminSockets = new Set();
 
 let auctionTimer = null;
+let autoNominateTimer = null;
+let autoBidTimer = null;
 
 // ─── Helper Functions ────────────────────────────────────────────────────────
 
+function getActiveParticipants() {
+  return PARTICIPANTS.filter(name => !state.participants[name].disabled);
+}
+
 function getJoinedCount() {
-  return Object.values(state.participants).filter(p => p.joined).length;
+  return Object.values(state.participants).filter(p => (p.joined || p.autoDraft) && !p.disabled).length;
 }
 
 function allJoined() {
-  return getJoinedCount() === PARTICIPANTS.length;
+  const active = getActiveParticipants();
+  return active.length > 0 && active.every(name => {
+    const p = state.participants[name];
+    return p.joined || p.autoDraft;
+  });
 }
 
 function getRemainingTeams() {
@@ -171,9 +206,10 @@ function getCurrentNominator() {
   let idx = state.nominationIndex % names.length;
   let checked = 0;
   while (checked < names.length) {
-    const p = state.participants[names[idx]];
-    if (p.teams.length < TEAMS_PER_PLAYER) {
-      return names[idx];
+    const name = names[idx];
+    const p = state.participants[name];
+    if (!p.disabled && p.teams.length < TEAMS_PER_PLAYER) {
+      return name;
     }
     idx = (idx + 1) % names.length;
     state.nominationIndex++;
@@ -183,7 +219,9 @@ function getCurrentNominator() {
 }
 
 function isDraftComplete() {
-  return state.draftedTeams.length >= TOTAL_TEAMS;
+  if (state.draftedTeams.length >= TOTAL_TEAMS) return true;
+  const active = getActiveParticipants();
+  return active.every(name => state.participants[name].teams.length >= TEAMS_PER_PLAYER);
 }
 
 function addActivity(message) {
@@ -203,6 +241,8 @@ function buildClientState(forPlayer) {
       budget: p.budget,
       teams: p.teams,
       teamCount: p.teams.length,
+      disabled: p.disabled,
+      autoDraft: p.autoDraft,
     };
   }
 
@@ -222,6 +262,7 @@ function buildClientState(forPlayer) {
     totalTeamsDrafted: state.draftedTeams.length,
     totalTeams: TOTAL_TEAMS,
     participantOrder: PARTICIPANTS,
+    draftValues: getDraftValues(),
   };
 }
 
@@ -246,6 +287,7 @@ function startAuctionTimer() {
     state.currentAuction.timeLeft--;
     if (state.currentAuction.timeLeft <= 0) {
       clearInterval(auctionTimer);
+      clearTimeout(autoBidTimer);
       const auction = state.currentAuction;
       const winner = state.participants[auction.highBidder];
       const team = TEAMS.find(t => t.name === auction.team);
@@ -290,6 +332,7 @@ function startAuctionTimer() {
             addActivity('Draft complete!');
           } else {
             state.phase = 'drafting';
+            scheduleAutoNominate();
           }
         }
         broadcastState();
@@ -300,12 +343,87 @@ function startAuctionTimer() {
   }, 1000);
 }
 
+function scheduleAutoNominate() {
+  clearTimeout(autoNominateTimer);
+  if (state.phase !== 'drafting') return;
+
+  const nominator = getCurrentNominator();
+  if (!nominator) return;
+
+  const p = state.participants[nominator];
+  if (!p.autoDraft) return;
+
+  autoNominateTimer = setTimeout(() => {
+    if (state.phase !== 'drafting') return;
+    // Re-check in case state changed
+    const currentNom = getCurrentNominator();
+    if (!currentNom || !state.participants[currentNom].autoDraft) return;
+
+    // Pick best available team (lowest seed = highest ranked) at $1
+    const remaining = getRemainingTeams().sort((a, b) => a.seed - b.seed || a.name.localeCompare(b.name));
+    if (remaining.length === 0) return;
+
+    const team = remaining[0];
+
+    state.phase = 'auction';
+    state.currentAuction = {
+      team: team.name,
+      seed: team.seed,
+      region: team.region,
+      highBid: 1,
+      highBidder: currentNom,
+      timeLeft: TIMER_SECONDS,
+      nominatedBy: currentNom,
+    };
+
+    addActivity(`${currentNom} (auto) nominated ${team.name} (${team.seed}) at $1`);
+    broadcastState();
+    startAuctionTimer();
+    scheduleAutoBid();
+  }, 2000);
+}
+
+function scheduleAutoBid() {
+  clearTimeout(autoBidTimer);
+  if (state.phase !== 'auction' || !state.currentAuction) return;
+
+  autoBidTimer = setTimeout(() => {
+    if (state.phase !== 'auction' || !state.currentAuction) return;
+
+    const auction = state.currentAuction;
+    const draftValues = getDraftValues();
+    const teamDraftValue = draftValues[auction.seed];
+
+    for (const name of PARTICIPANTS) {
+      const p = state.participants[name];
+      if (!p.autoDraft || p.disabled) continue;
+      if (name === auction.highBidder) continue;
+      if (p.teams.length >= TEAMS_PER_PLAYER) continue;
+
+      const maxBid = getMaxBid(p);
+      const targetBid = Math.min(teamDraftValue, maxBid);
+
+      if (auction.highBid < targetBid) {
+        const newBid = auction.highBid + 1;
+        auction.highBid = newBid;
+        auction.highBidder = name;
+        auction.timeLeft = TIMER_SECONDS;
+        addActivity(`${name} (auto) bid $${newBid} on ${auction.team}`);
+        broadcastState();
+        scheduleAutoBid(); // chain for next auto-bid
+        return;
+      }
+    }
+  }, 1500);
+}
+
 function autoFillMinBidPlayers() {
   let changed = true;
   while (changed) {
     changed = false;
     for (const name of PARTICIPANTS) {
       const p = state.participants[name];
+      if (p.disabled) continue;
       const needed = getTeamsNeeded(p);
       if (needed <= 0) continue;
       if (p.budget === needed) {
@@ -403,6 +521,7 @@ io.on('connection', (socket) => {
     state.nominationIndex = 0;
     addActivity('Draft started!');
     broadcastState();
+    scheduleAutoNominate();
   });
 
   socket.on('forceStartDraft', () => {
@@ -416,6 +535,7 @@ io.on('connection', (socket) => {
     state.nominationIndex = 0;
     addActivity('Draft force-started by admin');
     broadcastState();
+    scheduleAutoNominate();
   });
 
   socket.on('nominate', ({ teamName, startingBid }) => {
@@ -451,6 +571,7 @@ io.on('connection', (socket) => {
     addActivity(`${playerName} nominated ${team.name} (${team.seed}) at $${bid}`);
     broadcastState();
     startAuctionTimer();
+    scheduleAutoBid();
   });
 
   socket.on('placeBid', (amount) => {
@@ -480,6 +601,7 @@ io.on('connection', (socket) => {
 
     addActivity(`${playerName} bid $${bid} on ${auction.team}`);
     broadcastState();
+    scheduleAutoBid();
   });
 
   // ─── Admin Commands ──────────────────────────────────────────────────────
@@ -491,6 +613,7 @@ io.on('connection', (socket) => {
     state.pausedPhase = state.phase;
     if (state.phase === 'auction') {
       clearInterval(auctionTimer);
+      clearTimeout(autoBidTimer);
     }
     state.phase = 'paused';
     addActivity('Draft paused by admin');
@@ -505,9 +628,11 @@ io.on('connection', (socket) => {
     state.pausedPhase = null;
     if (state.phase === 'auction' && state.currentAuction) {
       startAuctionTimer();
+      scheduleAutoBid();
     }
     addActivity('Draft resumed by admin');
     broadcastState();
+    scheduleAutoNominate();
   });
 
   socket.on('adminUpdateSale', ({ teamName, newPrice }) => {
@@ -597,14 +722,15 @@ io.on('connection', (socket) => {
   socket.on('adminRestartDraft', () => {
     if (!adminSockets.has(socket.id)) return;
 
-    // Clear auction timer
+    // Clear timers
     clearInterval(auctionTimer);
+    clearTimeout(autoNominateTimer);
+    clearTimeout(autoBidTimer);
 
-    // Reset all participant state
+    // Reset all participant state (keep joined/socketId/disabled/autoDraft)
     for (const name of PARTICIPANTS) {
       state.participants[name].budget = STARTING_BUDGET;
       state.participants[name].teams = [];
-      // Keep joined/socketId intact so nobody needs to rejoin
     }
 
     state.nominationIndex = 0;
@@ -617,6 +743,7 @@ io.on('connection', (socket) => {
 
     addActivity('Draft restarted by admin — all picks cleared');
     broadcastState();
+    scheduleAutoNominate();
   });
 
   socket.on('adminSkipNomination', () => {
@@ -630,6 +757,47 @@ io.on('connection', (socket) => {
       state.pausedPhase = 'drafting';
     }
     broadcastState();
+    scheduleAutoNominate();
+  });
+
+  socket.on('adminToggleDisable', ({ name }) => {
+    if (!adminSockets.has(socket.id)) return;
+    if (name === ADMIN_NAME) {
+      socket.emit('error', "You can't disable yourself.");
+      return;
+    }
+    const p = state.participants[name];
+    if (!p) return;
+
+    p.disabled = !p.disabled;
+    if (p.disabled) {
+      p.autoDraft = false; // mutually exclusive
+      addActivity(`Admin disabled ${name}`);
+    } else {
+      addActivity(`Admin enabled ${name}`);
+    }
+    broadcastState();
+    scheduleAutoNominate();
+  });
+
+  socket.on('adminToggleAutoDraft', ({ name }) => {
+    if (!adminSockets.has(socket.id)) return;
+    if (name === ADMIN_NAME) {
+      socket.emit('error', "You can't auto-draft yourself.");
+      return;
+    }
+    const p = state.participants[name];
+    if (!p) return;
+
+    p.autoDraft = !p.autoDraft;
+    if (p.autoDraft) {
+      p.disabled = false; // mutually exclusive
+      addActivity(`Admin enabled auto-draft for ${name}`);
+    } else {
+      addActivity(`Admin disabled auto-draft for ${name}`);
+    }
+    broadcastState();
+    scheduleAutoNominate();
   });
 
   socket.on('disconnect', () => {
