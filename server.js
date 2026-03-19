@@ -539,6 +539,16 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  socket.on('leaveLobby', () => {
+    if (!playerName || state.phase !== 'lobby') return;
+    state.participants[playerName].joined = false;
+    state.participants[playerName].socketId = null;
+    adminSockets.delete(socket.id);
+    addActivity(`${playerName} left the lobby`);
+    playerName = null;
+    broadcastState();
+  });
+
   socket.on('startDraft', () => {
     if (state.phase !== 'lobby') return;
     if (playerName !== ADMIN_NAME || !adminSockets.has(socket.id)) {

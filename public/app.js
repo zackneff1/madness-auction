@@ -255,6 +255,18 @@ joinBtn.addEventListener('click', () => {
   socket.emit('join', payload);
 });
 
+// Leave lobby — go back to join screen
+document.getElementById('leave-lobby-btn').addEventListener('click', () => {
+  socket.emit('leaveLobby');
+  myName = null;
+  currentState = null;
+  showScreen('join');
+  joinSelect.value = '';
+  passwordRow.style.display = 'none';
+  adminPasswordInput.value = '';
+  joinError.textContent = '';
+});
+
 // Handle Enter key on password field
 adminPasswordInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') joinBtn.click();
