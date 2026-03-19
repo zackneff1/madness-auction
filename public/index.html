@@ -171,24 +171,32 @@
     </nav>
 
     <div class="draft-layout">
-      <!-- Left Sidebar: Your Roster -->
+      <!-- Left Sidebar: Your Roster / All Teams -->
       <aside class="sidebar sidebar-left" data-panel="roster">
-        <h3>Your Roster</h3>
-        <div class="budget-display">
-          <div class="budget-item">
-            <span class="budget-label">Budget</span>
-            <span id="your-budget" class="budget-value">$200</span>
-          </div>
-          <div class="budget-item">
-            <span class="budget-label">Max Bid</span>
-            <span id="your-max-bid" class="budget-value">$196</span>
-          </div>
-          <div class="budget-item">
-            <span class="budget-label">Spent</span>
-            <span id="your-spent" class="budget-value">$0</span>
-          </div>
+        <div class="sidebar-tabs">
+          <button class="sidebar-tab active" data-sidebar="roster-view">Your Roster</button>
+          <button class="sidebar-tab" data-sidebar="allteams-view">All Teams</button>
         </div>
-        <div id="your-teams" class="team-list"></div>
+        <div id="roster-view" class="sidebar-view active">
+          <div class="budget-display">
+            <div class="budget-item">
+              <span class="budget-label">Budget</span>
+              <span id="your-budget" class="budget-value">$200</span>
+            </div>
+            <div class="budget-item">
+              <span class="budget-label">Max Bid</span>
+              <span id="your-max-bid" class="budget-value">$196</span>
+            </div>
+            <div class="budget-item">
+              <span class="budget-label">Spent</span>
+              <span id="your-spent" class="budget-value">$0</span>
+            </div>
+          </div>
+          <div id="your-teams" class="team-list"></div>
+        </div>
+        <div id="allteams-view" class="sidebar-view">
+          <div id="all-teams-list" class="all-teams-list"></div>
+        </div>
       </aside>
 
       <!-- Center: Auction Area -->

@@ -560,6 +560,76 @@ select:focus, input[type="number"]:focus {
   margin-bottom: 16px;
 }
 
+.sidebar-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-tab {
+  flex: 1;
+  background: none;
+  border: none;
+  color: var(--text-dim);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 8px 4px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color 0.2s, border-color 0.2s;
+}
+.sidebar-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+.sidebar-tab:hover {
+  color: var(--text);
+}
+
+.sidebar-view {
+  display: none;
+}
+.sidebar-view.active {
+  display: block;
+}
+
+.all-teams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.all-teams-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--bg-input);
+  border-radius: var(--radius-sm);
+  font-size: 0.78rem;
+}
+.all-teams-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.all-teams-region {
+  color: var(--text-dim);
+  font-size: 0.65rem;
+  flex-shrink: 0;
+}
+.all-teams-value {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 0.78rem;
+  flex-shrink: 0;
+  min-width: 30px;
+  text-align: right;
+}
+
 .budget-display {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

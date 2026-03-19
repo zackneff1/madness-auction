@@ -115,27 +115,57 @@ const TEAMS = [
 ];
 
 // ─── Draft Value Model (Neffy's Model) ──────────────────────────────────────
-// Static draft values — these never change regardless of draft state.
-const DRAFT_VALUES = {
-  'Duke': 185, 'Arizona': 182, 'Michigan': 180, 'Florida': 121,
-  'Houston': 79, 'Iowa State': 57, 'Illinois': 47, 'Purdue': 43,
-  'UConn': 36, 'Gonzaga': 29, 'Michigan State': 27, 'Arkansas': 22,
-  'Kansas': 20, "St. John's": 20, 'Virginia': 19, 'Vanderbilt': 19,
-  'Wisconsin': 14, 'Nebraska': 14, 'Texas Tech': 13, 'Tennessee': 13,
-  'Louisville': 13, 'Alabama': 10, 'UCLA': 10, 'Ohio State': 7,
-  'Kentucky': 6, "Saint Mary's": 6, 'North Carolina': 5, 'Iowa': 5,
-  'BYU': 5, 'Miami (FL)': 4, 'Clemson': 3, 'Georgia': 3,
-  'Santa Clara': 3, 'Utah State': 3, 'Missouri': 3, 'South Florida': 3,
-  'Texas': 3, 'SMU': 2, 'VCU': 2, 'TCU': 2, 'Texas A&M': 2,
-  'Saint Louis': 2, 'UCF': 1, 'McNeese': 1, 'Akron': 1,
-  'Northern Iowa': 1, 'High Point': 1, 'Hofstra': 1,
-  'North Dakota State': 1, 'Cal Baptist': 1, 'Troy': 1, 'Hawaii': 1,
-  'Penn': 1, 'Idaho': 1, 'Kennesaw State': 1, 'Wright State': 1,
-  'Furman': 1, 'Queens': 1, 'Tennessee State': 1, 'Villanova': 1,
+// Base expected wins per team (from CSV). Used as ratios for scaling draft values.
+const BASE_EXPECTED_WINS = {
+  'Michigan': 3.855, 'Duke': 3.832, 'Arizona': 3.725, 'Florida': 3.141,
+  'Iowa State': 2.813, 'Houston': 2.732, 'Illinois': 2.638, 'Purdue': 2.599,
+  'Gonzaga': 2.328, 'UConn': 2.273, 'Michigan State': 2.053, 'Virginia': 1.894,
+  'Arkansas': 1.79, 'Nebraska': 1.738, 'Vanderbilt': 1.737, "St. John's": 1.704,
+  'Alabama': 1.623, 'Kansas': 1.621, 'Wisconsin': 1.538, 'Texas Tech': 1.486,
+  'Louisville': 1.426, 'Tennessee': 1.387, 'UCLA': 1.275, "Saint Mary's": 0.963,
+  'Ohio State': 0.888, 'Kentucky': 0.886, 'BYU': 0.884, 'SMU': 0.88,
+  'Miami (FL)': 0.878, 'North Carolina': 0.791, 'Iowa': 0.79, 'Georgia': 0.788,
+  'Utah State': 0.722, 'Clemson': 0.661, 'Texas': 0.643, 'VCU': 0.625,
+  'Villanova': 0.622, 'Missouri': 0.617, 'Santa Clara': 0.598, 'Texas A&M': 0.568,
+  'TCU': 0.548, 'Saint Louis': 0.518, 'South Florida': 0.461, 'UCF': 0.419,
+  'Akron': 0.337, 'Northern Iowa': 0.285, 'High Point': 0.256, 'McNeese': 0.248,
+  'Hofstra': 0.201, 'Cal Baptist': 0.168, 'Troy': 0.158, 'Hawaii': 0.134,
+  'North Dakota State': 0.119, 'Wright State': 0.087, 'Kennesaw State': 0.081,
+  'Furman': 0.071, 'Penn': 0.062, 'Idaho': 0.06, 'Queens': 0.054,
+  'Tennessee State': 0.052,
 };
 
+// Compute draft values scaled to a target budget using largest-remainder rounding
+function computeDraftValues(targetBudget) {
+  let totalEW = 0;
+  for (const team of TEAMS) {
+    totalEW += BASE_EXPECTED_WINS[team.name] || 0.01;
+  }
+  const values = {};
+  let floorSum = 0;
+  const remainders = [];
+  for (const team of TEAMS) {
+    const ew = BASE_EXPECTED_WINS[team.name] || 0.01;
+    const raw = Math.max(1, (ew / totalEW) * targetBudget);
+    const floored = Math.floor(raw);
+    values[team.name] = floored;
+    floorSum += floored;
+    remainders.push({ name: team.name, remainder: raw - floored });
+  }
+  remainders.sort((a, b) => b.remainder - a.remainder);
+  let leftover = targetBudget - floorSum;
+  for (let i = 0; i < leftover && i < remainders.length; i++) {
+    values[remainders[i].name]++;
+  }
+  return values;
+}
+
 function getDraftValues() {
-  return DRAFT_VALUES;
+  // Once locked (draft started), return the locked values
+  if (state.lockedDraftValues) return state.lockedDraftValues;
+  // In lobby, show preview based on current active player count
+  const activeCount = getActiveParticipants().length || 1;
+  return computeDraftValues(activeCount * STARTING_BUDGET);
 }
 
 // ─── Game State ──────────────────────────────────────────────────────────────
@@ -149,6 +179,7 @@ const state = {
   draftLog: [],         // { team, seed, region, winner, price }
   activityLog: [],      // { message, timestamp }
   pausedPhase: null,    // the phase to return to after unpausing
+  lockedDraftValues: null, // frozen at draft start, null in lobby
 };
 
 // Initialize participants
@@ -518,6 +549,9 @@ io.on('connection', (socket) => {
       socket.emit('error', 'Not all participants have joined yet.');
       return;
     }
+    // Lock draft values at draft start based on active player count
+    const activeCount = getActiveParticipants().length;
+    state.lockedDraftValues = computeDraftValues(activeCount * STARTING_BUDGET);
     state.phase = 'drafting';
     state.nominationIndex = 0;
     addActivity('Draft started!');
@@ -531,6 +565,9 @@ io.on('connection', (socket) => {
       socket.emit('error', 'Only the admin can force-start.');
       return;
     }
+    // Lock draft values at draft start based on active player count
+    const activeCount = getActiveParticipants().length;
+    state.lockedDraftValues = computeDraftValues(activeCount * STARTING_BUDGET);
     // Start even if not all players joined
     state.phase = 'drafting';
     state.nominationIndex = 0;
@@ -739,8 +776,12 @@ io.on('connection', (socket) => {
     state.draftedTeams = [];
     state.draftLog = [];
     state.pausedPhase = null;
-    state.phase = 'drafting';
     state.activityLog = [];
+
+    // Re-lock draft values based on current active player count
+    const activeCount = getActiveParticipants().length;
+    state.lockedDraftValues = computeDraftValues(activeCount * STARTING_BUDGET);
+    state.phase = 'drafting';
 
     addActivity('Draft restarted by admin — all picks cleared');
     broadcastState();

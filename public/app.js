@@ -26,59 +26,86 @@ const STEAL_LINES = [
 let overpayIndex = 0;
 let stealIndex = 0;
 
-// ─── Speech Synthesis (robust cross-browser) ────────────────────────────────
-// Chrome: voices load async, must wait for voiceschanged.
-// Chrome: speechSynthesis gets "stuck" if idle — need cancel+resume cycle.
-// Safari/iOS: first speak() must originate from a user gesture.
-// All browsers: utterance must be created fresh each time.
+// ─── Speech Synthesis (cross-browser with Chrome fixes) ─────────────────────
 
 let speechVoice = null;
+let audioCtx = null;
 
-function loadVoices() {
+function pickVoice() {
   if (!window.speechSynthesis) return;
   const voices = window.speechSynthesis.getVoices();
-  if (voices.length) {
-    speechVoice = voices.find(v => v.lang.startsWith('en') && v.localService)
-      || voices.find(v => v.lang.startsWith('en'))
-      || voices[0];
-  }
+  if (!voices.length) return;
+  // Prefer funny/sarcastic-sounding voices: British male, or "Daniel", "Oliver", etc.
+  speechVoice =
+    voices.find(v => v.name === 'Daniel') ||                         // macOS British
+    voices.find(v => v.name === 'Oliver') ||                         // macOS
+    voices.find(v => v.name.includes('Google UK English Male')) ||    // Chrome
+    voices.find(v => v.name.includes('Google UK English Female')) ||  // Chrome fallback
+    voices.find(v => /\b(UK|British|Australian)\b/i.test(v.name) && v.lang.startsWith('en')) ||
+    voices.find(v => v.lang.startsWith('en') && v.localService) ||
+    voices.find(v => v.lang.startsWith('en')) ||
+    voices[0];
 }
 
 if (window.speechSynthesis) {
-  loadVoices();
-  window.speechSynthesis.onvoiceschanged = loadVoices;
+  pickVoice();
+  window.speechSynthesis.onvoiceschanged = pickVoice;
 }
 
-// Unlock on any user gesture — speak a real word at near-zero volume
-document.addEventListener('click', function unlockTTS() {
-  if (!window.speechSynthesis) return;
-  const u = new SpeechSynthesisUtterance('test');
-  u.volume = 0.01;
-  u.rate = 2;
-  if (speechVoice) u.voice = speechVoice;
-  window.speechSynthesis.speak(u);
-  document.removeEventListener('click', unlockTTS);
-});
+// Dual unlock: AudioContext (Chrome) + speechSynthesis (Safari)
+function unlockAudio() {
+  // AudioContext unlock for Chrome
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+
+  // speechSynthesis unlock — must speak from user gesture
+  if (window.speechSynthesis) {
+    const u = new SpeechSynthesisUtterance('.');
+    u.volume = 0.01;
+    u.rate = 10;
+    if (speechVoice) u.voice = speechVoice;
+    window.speechSynthesis.speak(u);
+  }
+}
+document.addEventListener('click', unlockAudio, { once: true });
+document.addEventListener('touchend', unlockAudio, { once: true });
 
 function speakCommentary(text) {
   if (!window.speechSynthesis) return;
 
-  // Chrome stuck-state workaround
+  // Resume AudioContext (Chrome audio unlock)
+  if (audioCtx && audioCtx.state === 'suspended') {
+    audioCtx.resume();
+  }
+
+  // Chrome: cancel any stuck/pending speech, then resume if paused
   window.speechSynthesis.cancel();
   if (window.speechSynthesis.paused) {
     window.speechSynthesis.resume();
   }
 
+  // Build utterance with sarcastic tone
   const utter = new SpeechSynthesisUtterance(text);
-  utter.rate = 0.9;
-  utter.pitch = 1.0;
+  utter.rate = 1.05;   // slightly fast — snarky delivery
+  utter.pitch = 1.4;   // higher pitch — exaggerated / comedic
   utter.volume = 1.0;
   if (speechVoice) utter.voice = speechVoice;
 
-  // Delay after cancel to avoid Chrome race condition
+  // Chrome needs a delay after cancel() before speak() works
   setTimeout(() => {
     window.speechSynthesis.speak(utter);
-  }, 250);
+
+    // Chrome watchdog: if still "speaking" after 8s with no audio, force retry
+    setTimeout(() => {
+      if (window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+      }
+    }, 8000);
+  }, 300);
 }
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
@@ -386,6 +413,17 @@ adminRestartBtn.addEventListener('click', () => {
   adminRestartBtn.disabled = true;
 });
 
+// Sidebar tabs (Your Roster / All Teams)
+document.querySelectorAll('.sidebar-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    const target = tab.dataset.sidebar;
+    document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    document.querySelectorAll('.sidebar-view').forEach(v => v.classList.remove('active'));
+    document.getElementById(target).classList.add('active');
+  });
+});
+
 // Mobile tabs
 document.querySelectorAll('.mobile-tab').forEach(tab => {
   tab.addEventListener('click', () => {
@@ -646,6 +684,9 @@ function renderDraft(state) {
     yourTeams.innerHTML = '<div class="subtle-msg" style="padding:8px;">No teams yet</div>';
   }
 
+  // All teams list
+  renderAllTeams(state);
+
   // Draft board
   renderDraftBoard(state);
 
@@ -787,6 +828,34 @@ function renderDraft(state) {
     lastKnownHighBid = null;
     userEditedBid = false;
     bidInput.value = '';
+  }
+}
+
+function renderAllTeams(state) {
+  const list = document.getElementById('all-teams-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const dv = state.draftValues || {};
+  const remaining = state.remainingTeams || [];
+  const drafted = new Set(state.draftLog ? state.draftLog.map(e => e.team) : []);
+
+  // Show all teams sorted by value descending
+  const allTeams = [...remaining].sort((a, b) => (dv[b.name] || 0) - (dv[a.name] || 0));
+
+  for (const t of allTeams) {
+    const div = document.createElement('div');
+    div.className = 'all-teams-row';
+    div.innerHTML = `
+      <span class="seed-badge">${t.seed}</span>
+      <span class="all-teams-name">${t.name}</span>
+      <span class="all-teams-region">${t.region}</span>
+      <span class="all-teams-value">$${dv[t.name] || '?'}</span>
+    `;
+    list.appendChild(div);
+  }
+
+  if (allTeams.length === 0) {
+    list.innerHTML = '<div class="subtle-msg" style="padding:8px;">All teams drafted</div>';
   }
 }
 
