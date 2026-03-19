@@ -86,6 +86,7 @@
         <button id="admin-panel-toggle" class="btn-admin">Manage Sales</button>
         <button id="admin-kick-toggle" class="btn-admin btn-admin-red">Kick Player</button>
         <button id="admin-restart-toggle" class="btn-admin btn-admin-red">Restart Draft</button>
+        <button id="admin-back-to-lobby-toggle" class="btn-admin btn-admin-red">Back to Lobby</button>
       </div>
     </div>
 
@@ -126,6 +127,28 @@
           <p class="subtle-msg" style="margin-bottom:12px;">Kick a player so the correct person can rejoin with that name.</p>
           <select id="admin-kick-player"></select>
           <button id="admin-kick-btn" class="btn-admin btn-admin-red" style="margin-top:10px;">Kick Player</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Admin Modal: Back to Lobby -->
+    <div id="admin-lobby-modal" class="modal-overlay" style="display:none;">
+      <div class="modal">
+        <div class="modal-header">
+          <h3>Back to Lobby</h3>
+          <button class="modal-close" onclick="document.getElementById('admin-lobby-modal').style.display='none'">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="restart-warning">
+            <div class="restart-warning-icon">!</div>
+            <h4>Return everyone to the lobby?</h4>
+            <p>This will <strong>erase all picks, bids, and draft history</strong> and send everyone back to the waiting room. Players will remain connected.</p>
+            <p style="margin-top:8px;color:var(--red);font-weight:600;">This cannot be undone.</p>
+          </div>
+          <div class="restart-actions">
+            <button class="btn-secondary" onclick="document.getElementById('admin-lobby-modal').style.display='none'">Cancel</button>
+            <button id="admin-back-to-lobby-btn" class="btn-admin btn-admin-red restart-btn">Back to Lobby</button>
+          </div>
         </div>
       </div>
     </div>

@@ -376,6 +376,16 @@ adminPlayersToggle.addEventListener('click', () => {
   populateAdminPlayersList();
 });
 
+// Back to Lobby
+document.getElementById('admin-back-to-lobby-toggle').addEventListener('click', () => {
+  document.getElementById('admin-lobby-modal').style.display = 'flex';
+});
+
+document.getElementById('admin-back-to-lobby-btn').addEventListener('click', () => {
+  socket.emit('adminBackToLobby');
+  document.getElementById('admin-lobby-modal').style.display = 'none';
+});
+
 document.getElementById('admin-update-sale-btn').addEventListener('click', () => {
   const teamName = document.getElementById('admin-sale-team').value;
   const newPrice = parseInt(document.getElementById('admin-new-price').value);

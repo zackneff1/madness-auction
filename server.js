@@ -792,6 +792,33 @@ io.on('connection', (socket) => {
     broadcastState();
   });
 
+  socket.on('adminBackToLobby', () => {
+    if (!adminSockets.has(socket.id)) return;
+
+    // Clear timers
+    clearInterval(auctionTimer);
+    clearTimeout(autoNominateTimer);
+    clearTimeout(autoBidTimer);
+
+    // Reset all draft state but keep joined/socketId/disabled/autoDraft
+    for (const name of PARTICIPANTS) {
+      state.participants[name].budget = STARTING_BUDGET;
+      state.participants[name].teams = [];
+    }
+
+    state.nominationIndex = 0;
+    state.currentAuction = null;
+    state.draftedTeams = [];
+    state.draftLog = [];
+    state.pausedPhase = null;
+    state.lockedDraftValues = null; // unlock so lobby preview recalculates
+    state.phase = 'lobby';
+    state.activityLog = [];
+
+    addActivity('Admin returned everyone to the lobby');
+    broadcastState();
+  });
+
   socket.on('adminRestartDraft', () => {
     if (!adminSockets.has(socket.id)) return;
 
