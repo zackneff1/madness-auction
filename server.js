@@ -135,16 +135,37 @@ const BASE_EXPECTED_WINS = {
   'Tennessee State': 0.052,
 };
 
-// Compute draft values scaled to a target budget using largest-remainder rounding
+// Compute draft values scaled to a target budget using largest-remainder rounding.
+// Only the top N teams get value, where N = activePlayerCount * TEAMS_PER_PLAYER + buffer.
+// Teams beyond that are zeroed out since nobody will realistically draft them.
 function computeDraftValues(targetBudget) {
+  const activeCount = Math.round(targetBudget / STARTING_BUDGET) || 1;
+  const draftableCount = activeCount * TEAMS_PER_PLAYER;
+  // Small buffer so fringe teams still show a value (3 extra per player)
+  const valuedCount = Math.min(TEAMS.length, draftableCount + activeCount * 3);
+
+  // Sort teams by expected wins descending to determine cutoff
+  const sorted = [...TEAMS].sort((a, b) =>
+    (BASE_EXPECTED_WINS[b.name] || 0) - (BASE_EXPECTED_WINS[a.name] || 0)
+  );
+  const valuedSet = new Set(sorted.slice(0, valuedCount).map(t => t.name));
+
+  // Compute values only for teams in the valued set
   let totalEW = 0;
   for (const team of TEAMS) {
-    totalEW += BASE_EXPECTED_WINS[team.name] || 0.01;
+    if (valuedSet.has(team.name)) {
+      totalEW += BASE_EXPECTED_WINS[team.name] || 0.01;
+    }
   }
+
   const values = {};
   let floorSum = 0;
   const remainders = [];
   for (const team of TEAMS) {
+    if (!valuedSet.has(team.name)) {
+      values[team.name] = 0;
+      continue;
+    }
     const ew = BASE_EXPECTED_WINS[team.name] || 0.01;
     const raw = Math.max(1, (ew / totalEW) * targetBudget);
     const floored = Math.floor(raw);
@@ -632,6 +653,10 @@ io.on('connection', (socket) => {
 
     if (p.teams.length >= TEAMS_PER_PLAYER) {
       socket.emit('error', 'You already have the maximum number of teams.');
+      return;
+    }
+    if (auction.highBidder === playerName) {
+      socket.emit('error', 'You already have the highest bid.');
       return;
     }
     if (bid <= auction.highBid) {
