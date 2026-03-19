@@ -26,28 +26,59 @@ const STEAL_LINES = [
 let overpayIndex = 0;
 let stealIndex = 0;
 
-// Browsers block speechSynthesis until a user gesture unlocks it.
-// We unlock on the first click/tap anywhere on the page.
-let speechUnlocked = false;
-function unlockSpeech() {
-  if (speechUnlocked || !window.speechSynthesis) return;
-  const silent = new SpeechSynthesisUtterance('');
-  silent.volume = 0;
-  window.speechSynthesis.speak(silent);
-  speechUnlocked = true;
+// ─── Speech Synthesis (robust cross-browser) ────────────────────────────────
+// Chrome: voices load async, must wait for voiceschanged.
+// Chrome: speechSynthesis gets "stuck" if idle — need cancel+resume cycle.
+// Safari/iOS: first speak() must originate from a user gesture.
+// All browsers: utterance must be created fresh each time.
+
+let speechVoice = null;
+
+function loadVoices() {
+  if (!window.speechSynthesis) return;
+  const voices = window.speechSynthesis.getVoices();
+  if (voices.length) {
+    speechVoice = voices.find(v => v.lang.startsWith('en') && v.localService)
+      || voices.find(v => v.lang.startsWith('en'))
+      || voices[0];
+  }
 }
-document.addEventListener('click', unlockSpeech, { once: false });
-document.addEventListener('touchstart', unlockSpeech, { once: false });
+
+if (window.speechSynthesis) {
+  loadVoices();
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+// Unlock on any user gesture — speak a real word at near-zero volume
+document.addEventListener('click', function unlockTTS() {
+  if (!window.speechSynthesis) return;
+  const u = new SpeechSynthesisUtterance('test');
+  u.volume = 0.01;
+  u.rate = 2;
+  if (speechVoice) u.voice = speechVoice;
+  window.speechSynthesis.speak(u);
+  document.removeEventListener('click', unlockTTS);
+});
 
 function speakCommentary(text) {
   if (!window.speechSynthesis) return;
+
+  // Chrome stuck-state workaround
   window.speechSynthesis.cancel();
+  if (window.speechSynthesis.paused) {
+    window.speechSynthesis.resume();
+  }
+
   const utter = new SpeechSynthesisUtterance(text);
-  utter.rate = 0.95;
+  utter.rate = 0.9;
   utter.pitch = 1.0;
   utter.volume = 1.0;
-  // Some browsers need a slight delay after cancel
-  setTimeout(() => window.speechSynthesis.speak(utter), 50);
+  if (speechVoice) utter.voice = speechVoice;
+
+  // Delay after cancel to avoid Chrome race condition
+  setTimeout(() => {
+    window.speechSynthesis.speak(utter);
+  }, 250);
 }
 
 // ─── DOM Elements ────────────────────────────────────────────────────────────
